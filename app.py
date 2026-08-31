@@ -23,7 +23,6 @@ st.set_page_config(
 # -----------------------------------------------------------------------------
 def check_login():
     """使用 st.secrets 驗證帳號密碼並控管登入狀態"""
-    # 檢查 secrets.toml 是否已正確設定 passwords
     if "passwords" not in st.secrets:
         st.error("⚠️ 未在 `st.secrets` 中找到 `[passwords]` 設定，請先建立 `.streamlit/secrets.toml`。")
         st.stop()
@@ -44,7 +43,6 @@ def check_login():
                 submit_button = st.form_submit_button("登入系統", use_container_width=True)
 
                 if submit_button:
-                    # 比對 secrets 中的帳號密碼
                     if username in valid_credentials and valid_credentials[username] == password:
                         st.session_state.authenticated = True
                         st.session_state.username = username
@@ -55,7 +53,6 @@ def check_login():
         return False
     return True
 
-# 若未通過登入驗證，立即中斷後續執行
 if not check_login():
     st.stop()
 
@@ -76,17 +73,17 @@ plt.rcParams['axes.unicode_minus'] = False
 # -----------------------------------------------------------------------------
 # 4. 輔助計算函式
 # -----------------------------------------------------------------------------
-def calculate_yahoo_rsi(series: pd.Series, period: int) -> pd.Series:[cite: 1]
+def calculate_yahoo_rsi(series: pd.Series, period: int) -> pd.Series:
     """計算 Yahoo Finance 相同邏輯的 RSI (Wilder's Smoothing)"""
-    delta = series.diff()[cite: 1]
-    gain = delta.clip(lower=0)[cite: 1]
-    loss = (-delta).clip(lower=0)[cite: 1]
+    delta = series.diff()
+    gain = delta.clip(lower=0)
+    loss = (-delta).clip(lower=0)
     
-    avg_gain = gain.ewm(alpha=1/period, adjust=False).mean()[cite: 1]
-    avg_loss = loss.ewm(alpha=1/period, adjust=False).mean()[cite: 1]
+    avg_gain = gain.ewm(alpha=1/period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1/period, adjust=False).mean()
     
-    rs = avg_gain / avg_loss[cite: 1]
-    return 100 - (100 / (1 + rs))[cite: 1]
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
 
 @st.cache_data(ttl=3600)
 def load_and_calculate_data(
@@ -100,17 +97,17 @@ def load_and_calculate_data(
     bias_short: int, bias_long: int
 ):
     """下載數據並動態計算技術指標"""
-    end_date = datetime.today().date()[cite: 1]
+    end_date = datetime.today().date()
     start = end_date - timedelta(days=days)
     warmup_days = max(60, ma_long * 2, macd_slow * 2, bb_period * 2)
     start_date = start - timedelta(days=warmup_days)
     
-    df = yf.download(stock_id, start=start_date, end=end_date)[cite: 1]
+    df = yf.download(stock_id, start=start_date, end=end_date)
     if df.empty:
         return None
     
-    if isinstance(df.columns, pd.MultiIndex):[cite: 1]
-        df.columns = df.columns.get_level_values(0)[cite: 1]
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
         
     # 1. 均線與布林通道
     df[f'SMA_{ma_short}'] = df['Close'].rolling(window=ma_short).mean()
@@ -126,13 +123,13 @@ def load_and_calculate_data(
     low_min = df['Low'].rolling(window=kd_period).min()
     high_max = df['High'].rolling(window=kd_period).max()
     df['RSV'] = ((df['Close'] - low_min) / (high_max - low_min)) * 100
-    df['K'] = df['RSV'].ewm(alpha=1/3, adjust=False).mean()[cite: 1]
-    df['D'] = df['K'].ewm(alpha=1/3, adjust=False).mean()[cite: 1]
-    df['J'] = 3 * df['D'] - 2 * df['K'][cite: 1]
+    df['K'] = df['RSV'].ewm(alpha=1/3, adjust=False).mean()
+    df['D'] = df['K'].ewm(alpha=1/3, adjust=False).mean()
+    df['J'] = 3 * df['D'] - 2 * df['K']
 
     # 3. OBV 能量潮
-    df['OBV'] = np.where(df['Close'] > df['Close'].shift(1), df['Volume'], -df['Volume'])[cite: 1]
-    df['OBV'] = df['OBV'].cumsum()[cite: 1]
+    df['OBV'] = np.where(df['Close'] > df['Close'].shift(1), df['Volume'], -df['Volume'])
+    df['OBV'] = df['OBV'].cumsum()
     df['OBV_MA'] = df['OBV'].rolling(10).mean()
 
     # 4. MACD
@@ -140,7 +137,7 @@ def load_and_calculate_data(
     df['EMA_slow'] = df['Close'].ewm(span=macd_slow, adjust=False).mean()
     df['DIF'] = df['EMA_fast'] - df['EMA_slow']
     df['MACD'] = df['DIF'].ewm(span=macd_signal, adjust=False).mean()
-    df['MACD Histogram'] = df['DIF'] - df['MACD'][cite: 1]
+    df['MACD Histogram'] = df['DIF'] - df['MACD']
 
     # 5. RSI
     df[f'RSI_{rsi_short}'] = calculate_yahoo_rsi(df['Close'], period=rsi_short)
@@ -151,8 +148,8 @@ def load_and_calculate_data(
     df[f'BIAS_{bias_long}'] = ((df['Close'] - df['Close'].rolling(bias_long).mean()) / df['Close'].rolling(bias_long).mean()) * 100
     df['BIAS_DIFF'] = df[f'BIAS_{bias_short}'] - df[f'BIAS_{bias_long}']
 
-    df = df.loc[start:, :].copy()[cite: 1]
-    df.index = df.index.map(lambda x: x.strftime('%y-%m-%d'))[cite: 1]
+    df = df.loc[start:, :].copy()
+    df.index = df.index.map(lambda x: x.strftime('%y-%m-%d'))
     return df
 
 # -----------------------------------------------------------------------------
@@ -420,10 +417,10 @@ else:
         fig = plt.figure(figsize=(14, 18), layout='constrained')
 
         # 1. K線與布林帶 (1~3格)
-        ax1 = fig.add_subplot(8, 1, (1, 3))[cite: 1]
-        ax1.set_xticks(x_ticks_pos)[cite: 1]
-        ax1.set_xticklabels(x_ticks_labels)[cite: 1]
-        mpf.candlestick2_ochl(ax1, df['Open'], df['Close'], df['High'], df['Low'], width=0.8, colorup='r', colordown='g', alpha=1)[cite: 1]
+        ax1 = fig.add_subplot(8, 1, (1, 3))
+        ax1.set_xticks(x_ticks_pos)
+        ax1.set_xticklabels(x_ticks_labels)
+        mpf.candlestick2_ochl(ax1, df['Open'], df['Close'], df['High'], df['Low'], width=0.8, colorup='r', colordown='g', alpha=1)
         ax1.plot(df[f'SMA_{ma_short}'], label=f'{ma_short}日均線', alpha=0.9, color='cyan', lw=0.8)
         ax1.plot(df[f'SMA_{ma_mid}'], label=f'{ma_mid}日均線', alpha=0.9, color='purple', lw=0.8)
         ax1.plot(df[f'SMA_{ma_long}'], label=f'{ma_long}日均線', alpha=0.9, color='orange', lw=0.8)
@@ -433,56 +430,56 @@ else:
         ax1.set_title(f"{stock_id} K線與指標全貌 ({df.index[0]} ~ {df.index[-1]})", fontsize=14)
 
         # 2. OBV 與 交易量 (第 4 格)
-        ax2 = fig.add_subplot(8, 1, 4)[cite: 1]
-        ax2.set_xticks(x_ticks_pos)[cite: 1]
-        ax2.set_xticklabels([])[cite: 1]
+        ax2 = fig.add_subplot(8, 1, 4)
+        ax2.set_xticks(x_ticks_pos)
+        ax2.set_xticklabels([])
         vol_colors = np.where(df['Close'] >= df['Close'].shift(1), 'r', 'g')
-        ax2.plot(df['OBV'], color='purple', linestyle='--', label='OBV')[cite: 1]
+        ax2.plot(df['OBV'], color='purple', linestyle='--', label='OBV')
         ax2.legend(loc="upper left")
         
-        ax2_1 = ax2.twinx()[cite: 1]
+        ax2_1 = ax2.twinx()
         ax2_1.bar(df.index, height=df['Volume'], color=vol_colors, width=0.8, alpha=0.5)
         red_patch = mpatches.Patch(color='red', label='紅漲')
         green_patch = mpatches.Patch(color='green', label='綠跌')
         ax2_1.legend(handles=[red_patch, green_patch], loc="upper right", title="交易量")
 
         # 3. KD 與 J 值 (第 5 格)
-        ax3 = fig.add_subplot(8, 1, 5)[cite: 1]
+        ax3 = fig.add_subplot(8, 1, 5)
         ax3.plot(df['K'], label=f'K 線 ({kd_period})', color='cyan', lw=0.8)
         ax3.plot(df['D'], label='D 線', color='purple', lw=0.8)
         ax3.plot(df['J'], label='J 線', linestyle='--', color='orange')
-        ax3.set_xticks(x_ticks_pos)[cite: 1]
+        ax3.set_xticks(x_ticks_pos)
         ax3.set_xticklabels([])
         ax3.legend(loc="upper left")
 
         # 4. MACD (第 6 格)
-        ax4 = fig.add_subplot(8, 1, 6)[cite: 1]
+        ax4 = fig.add_subplot(8, 1, 6)
         ax4.plot(df['DIF'], label='DIF', color='purple')
-        ax4.plot(df['MACD'], label='MACD', color='skyblue')[cite: 1]
-        macd_colors = np.where(df['MACD Histogram'] >= 0, 'r', 'g')[cite: 1]
-        ax4.bar(df.index, height=df['MACD Histogram'], color=macd_colors, alpha=0.8)[cite: 1]
+        ax4.plot(df['MACD'], label='MACD', color='skyblue')
+        macd_colors = np.where(df['MACD Histogram'] >= 0, 'r', 'g')
+        ax4.bar(df.index, height=df['MACD Histogram'], color=macd_colors, alpha=0.8)
         ax4.axhline(0, color='gray', linestyle='--', linewidth=1.0)
-        ax4.set_xticks(x_ticks_pos)[cite: 1]
-        ax4.set_xticklabels([])[cite: 1]
+        ax4.set_xticks(x_ticks_pos)
+        ax4.set_xticklabels([])
         macd_red_patch = mpatches.Patch(color='red', label='MACD多頭(紅)')
         macd_green_patch = mpatches.Patch(color='green', label='MACD空頭(綠)')
-        handles, labels = ax4.get_legend_handles_labels()[cite: 1]
-        handles.extend([macd_red_patch, macd_green_patch])[cite: 1]
+        handles, labels = ax4.get_legend_handles_labels()
+        handles.extend([macd_red_patch, macd_green_patch])
         ax4.legend(handles=handles, loc="upper left", fontsize=8)
 
         # 5. RSI (第 7 格)
-        ax5 = fig.add_subplot(8, 1, 7)[cite: 1]
+        ax5 = fig.add_subplot(8, 1, 7)
         ax5.plot(df[f'RSI_{rsi_short}'], label=f'RSI {rsi_short}', color='cyan', lw=0.8)
         ax5.plot(df[f'RSI_{rsi_long}'], label=f'RSI {rsi_long}', color='purple', lw=0.8)
-        ax5.set_xticks(x_ticks_pos)[cite: 1]
-        ax5.set_xticklabels([])[cite: 1]
-        ax5.set_ylim(0, 100)[cite: 1]
+        ax5.set_xticks(x_ticks_pos)
+        ax5.set_xticklabels([])
+        ax5.set_ylim(0, 100)
         ax5.axhline(70, color='red', linestyle='--', linewidth=0.8, alpha=0.6)
         ax5.axhline(30, color='green', linestyle='--', linewidth=0.8, alpha=0.6)
         ax5.legend(loc="upper left")
 
         # 6. BIAS 乖離率 (第 8 格)
-        ax6 = fig.add_subplot(8, 1, 8)[cite: 1]
+        ax6 = fig.add_subplot(8, 1, 8)
         ax6.plot(df[f'BIAS_{bias_short}'], label=f'BIAS {bias_short}', color='cyan', lw=0.8)
         ax6.plot(df[f'BIAS_{bias_long}'], label=f'BIAS {bias_long}', color='purple', lw=0.8)
         bias_colors = np.where(df['BIAS_DIFF'] >= 0, 'r', 'g')
@@ -490,9 +487,9 @@ else:
         ax6.axhline(0, color='gray', linestyle='--', linewidth=1.0)
         bias_red_patch = mpatches.Patch(color='red', label=f'B{bias_short}-B{bias_long} 正強')
         bias_green_patch = mpatches.Patch(color='green', label=f'B{bias_short}-B{bias_long} 負弱')
-        handles, labels = ax6.get_legend_handles_labels()[cite: 1]
-        handles.extend([bias_red_patch, bias_green_patch])[cite: 1]
-        ax6.set_xticks(x_ticks_pos)[cite: 1]
+        handles, labels = ax6.get_legend_handles_labels()
+        handles.extend([bias_red_patch, bias_green_patch])
+        ax6.set_xticks(x_ticks_pos)
         ax6.set_xticklabels(x_ticks_labels, rotation=45)
         ax6.legend(handles=handles, loc="upper left", fontsize=8)
 
